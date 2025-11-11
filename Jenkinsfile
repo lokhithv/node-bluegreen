@@ -1,34 +1,55 @@
 pipeline {
-  agent any
-  environment {
-    DOCKERHUB_REPO = 'https://hub.docker.com/repository/docker/lokhithv/bluegreenapp'
-    DOCKERHUB_CREDS = 'dockerhub-creds'
-    IMAGE_TAG = "${env.BUILD_NUMBER}"
-    IMAGE = "${env.DOCKERHUB_REPO}:${env.IMAGE_TAG}"
-  }
-  stages {
-    stage('Checkout') {
-      steps { checkout scm }
+    agent any
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
+        IMAGE = "lokhithv/bluegreenapp:${BUILD_NUMBER}"
     }
-    stage('Build & Test') {
-      steps { bat 'npm ci' }
-    }
-    stage('Docker Build & Push') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CREDS, usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
-          bat """
-          docker build -t %IMAGE% .
-          echo %DH_PASS% | docker login -u %DH_USER% --password-stdin
-          docker push %IMAGE%
-          docker logout
-          """
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Pulling latest code from GitHub...'
+                checkout scm
+            }
         }
-      }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "Building Docker image: ${IMAGE}"
+                bat """
+                    docker build -t ${IMAGE} .
+                """
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo "Pushing image to Docker Hub..."
+                bat """
+                    docker login -u %DOCKERHUB_CREDENTIALS_USR% -p %DOCKERHUB_CREDENTIALS_PSW%
+                    docker push ${IMAGE}
+                    docker logout
+                """
+            }
+        }
+
+        stage('Blue-Green Deploy') {
+            steps {
+                echo "Starting Blue-Green Deployment..."
+                bat """
+                    powershell -ExecutionPolicy Bypass -File E:\\bluegreen-scripts\\deploy_blue_green.ps1 ${IMAGE}
+                """
+            }
+        }
     }
-    stage('Blue-Green Deploy') {
-      steps {
-        bat "powershell -ExecutionPolicy Bypass -File E:\\bluegreen-scripts\\deploy_blue_green.ps1 ${IMAGE}"
-      }
+
+    post {
+        success {
+            echo "✅ Deployment successful! Active version: ${BUILD_NUMBER}"
+        }
+        failure {
+            echo "❌ Deployment failed! Check logs above."
+        }
     }
-  }
 }
