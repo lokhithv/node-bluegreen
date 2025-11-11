@@ -8,7 +8,7 @@ $GreenPort = 5000
 # Track current active deployment
 $ActiveFile = "E:\bluegreen-scripts\active_color.txt"
 
-# NGINX configuration and binary
+# NGINX config and binary
 $NginxConf = "C:\nginx-1.28.0\nginx-1.28.0\conf\app_upstream.conf"
 $NginxExe = "C:\nginx-1.28.0\nginx-1.28.0\nginx.exe"
 
@@ -19,7 +19,7 @@ function Get-ActiveColor {
 function Start-Container($Color, $Port) {
     $Name = "$AppName-$Color"
     Write-Host "→ Starting container: $Name on port $Port"
-    docker rm -f $Name | Out-Null
+    docker rm -f $Name | Out-Null  # Safe remove if exists
     docker run -d --name $Name -p ${Port}:3000 -e ENV_COLOR=$Color $IMAGE | Out-Null
 }
 
@@ -35,7 +35,7 @@ function Health-Check($Port) {
 }
 
 function Update-Nginx($Port, $Color) {
-    Write-Host "→ Updating NGINX to route traffic to $Color ($Port)..."
+    Write-Host "→ Updating NGINX to $Color on port $Port"
 
 @"
 upstream app_upstream {
@@ -50,11 +50,9 @@ server {
 }
 "@ | Set-Content $NginxConf
 
-    # NGINX graceful restart
-    taskkill /IM nginx.exe /F | Out-Null
+    # Restart nginx gracefully
+    taskkill /IM nginx.exe /F | Out-Null 2>$null
     Start-Process $NginxExe -WindowStyle Hidden
-
-    # Save new active color
     $Color | Set-Content $ActiveFile
 }
 
@@ -65,10 +63,10 @@ elseif ($Current -eq "green") { $Target="blue"; $Port=$BluePort }
 else { $Target="blue"; $Port=$BluePort }
 
 Write-Host "`n==============================="
-Write-Host "  BLUE-GREEN DEPLOYMENT START   "
+Write-Host "  BLUE-GREEN DEPLOYMENT START"
 Write-Host "===============================`n"
 Write-Host "Current Active: $Current"
-Write-Host "Deploying to:   $Target (Port $Port)"
+Write-Host "Deploying To:   $Target on $Port"
 Write-Host ""
 
 docker pull $IMAGE
@@ -84,8 +82,8 @@ if (-not (Health-Check $Port)) {
 Update-Nginx $Port $Target
 
 if ($Current -ne "none") {
-    Write-Host "→ Stopping old container: $AppName-$Current"
+    Write-Host "→ Removing old container: $AppName-$Current"
     docker rm -f "$AppName-$Current" | Out-Null
 }
 
-Write-Host "`n✅ Deployment COMPLETE. Now ACTIVE: $Target"
+Write-Host "`n✅ Deployment COMPLETE → Active now: $Target"
