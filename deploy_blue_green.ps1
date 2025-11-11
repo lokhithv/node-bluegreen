@@ -19,7 +19,8 @@ function Get-ActiveColor {
 function Start-Container($Color, $Port) {
     $Name = "$AppName-$Color"
     Write-Host "→ Starting container: $Name on port $Port"
-    docker rm -f $Name | Out-Null  # Safe remove if exists
+    docker stop $Name 2>$null | Out-Null
+    docker rm $Name 2>$null | Out-Null
     docker run -d --name $Name -p ${Port}:3000 -e ENV_COLOR=$Color $IMAGE | Out-Null
 }
 
@@ -50,8 +51,7 @@ server {
 }
 "@ | Set-Content $NginxConf
 
-    # Restart nginx gracefully
-    taskkill /IM nginx.exe /F | Out-Null 2>$null
+    taskkill /IM nginx.exe /F 2>$null | Out-Null
     Start-Process $NginxExe -WindowStyle Hidden
     $Color | Set-Content $ActiveFile
 }
@@ -69,13 +69,13 @@ Write-Host "Current Active: $Current"
 Write-Host "Deploying To:   $Target on $Port"
 Write-Host ""
 
-docker pull $IMAGE
+docker pull $IMAGE | Out-Null
 
 Start-Container $Target $Port
 
 if (-not (Health-Check $Port)) {
     Write-Host "❌ Health check FAILED! Rolling back..."
-    docker rm -f "$AppName-$Target" | Out-Null
+    docker rm -f "$AppName-$Target" 2>$null | Out-Null
     exit 1
 }
 
@@ -83,7 +83,7 @@ Update-Nginx $Port $Target
 
 if ($Current -ne "none") {
     Write-Host "→ Removing old container: $AppName-$Current"
-    docker rm -f "$AppName-$Current" | Out-Null
+    docker rm -f "$AppName-$Current" 2>$null | Out-Null
 }
 
 Write-Host "`n✅ Deployment COMPLETE → Active now: $Target"
