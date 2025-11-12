@@ -8,7 +8,7 @@ $GreenPort = 5000
 # Track current active deployment
 $ActiveFile = "E:\bluegreen-scripts\active_color.txt"
 
-# NGINX config and binary
+# NGINX paths
 $NginxConf = "C:\nginx-1.28.0\nginx-1.28.0\conf\app_upstream.conf"
 $NginxExe = "C:\nginx-1.28.0\nginx-1.28.0\nginx.exe"
 
@@ -19,8 +19,8 @@ function Get-ActiveColor {
 function Start-Container($Color, $Port) {
     $Name = "$AppName-$Color"
     Write-Host "→ Starting container: $Name on port $Port"
-    docker stop $Name 2>$null | Out-Null
-    docker rm $Name 2>$null | Out-Null
+    docker stop $Name *> $null
+    docker rm -f $Name *> $null
     docker run -d --name $Name -p ${Port}:3000 -e ENV_COLOR=$Color $IMAGE | Out-Null
 }
 
@@ -36,7 +36,7 @@ function Health-Check($Port) {
 }
 
 function Update-Nginx($Port, $Color) {
-    Write-Host "→ Updating NGINX to $Color on port $Port"
+    Write-Host "→ Updating NGINX to route traffic to $Color ($Port)..."
 
 @"
 upstream app_upstream {
@@ -51,39 +51,39 @@ server {
 }
 "@ | Set-Content $NginxConf
 
-    taskkill /IM nginx.exe /F 2>$null | Out-Null
-    Start-Process $NginxExe -WindowStyle Hidden
+    taskkill /IM nginx.exe /F *> $null
+    Start-Process $NginxExe
     $Color | Set-Content $ActiveFile
 }
 
-# Determine target color
+# Main Deployment Logic
 $Current = Get-ActiveColor
 if ($Current -eq "blue") { $Target="green"; $Port=$GreenPort }
 elseif ($Current -eq "green") { $Target="blue"; $Port=$BluePort }
 else { $Target="blue"; $Port=$BluePort }
 
 Write-Host "`n==============================="
-Write-Host "  BLUE-GREEN DEPLOYMENT START"
+Write-Host "  BLUE-GREEN DEPLOYMENT START   "
 Write-Host "===============================`n"
 Write-Host "Current Active: $Current"
-Write-Host "Deploying To:   $Target on $Port"
+Write-Host "Deploying to:   $Target on port $Port"
 Write-Host ""
 
-docker pull $IMAGE | Out-Null
+docker pull $IMAGE
 
 Start-Container $Target $Port
 
 if (-not (Health-Check $Port)) {
     Write-Host "❌ Health check FAILED! Rolling back..."
-    docker rm -f "$AppName-$Target" 2>$null | Out-Null
+    docker rm -f "$AppName-$Target" *> $null
     exit 1
 }
 
 Update-Nginx $Port $Target
 
 if ($Current -ne "none") {
-    Write-Host "→ Removing old container: $AppName-$Current"
-    docker rm -f "$AppName-$Current" 2>$null | Out-Null
+    Write-Host "→ Stopping old container: $AppName-$Current"
+    docker rm -f "$AppName-$Current" *> $null
 }
 
-Write-Host "`n✅ Deployment COMPLETE → Active now: $Target"
+Write-Host "`n✅ Deployment COMPLETE. Now ACTIVE: $Target"
