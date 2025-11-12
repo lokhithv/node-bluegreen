@@ -6,7 +6,7 @@ $BluePort = 4000
 $GreenPort = 5000
 
 # Track current active deployment
-$ActiveFile = "E:\bluegreen-scripts\active_color.txt"
+$ActiveFile = "E:\node-bluegreen\active_color.txt"
 
 # NGINX paths
 $NginxConf = "C:\nginx-1.28.0\nginx-1.28.0\conf\app_upstream.conf"
